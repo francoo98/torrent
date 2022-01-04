@@ -67,13 +67,10 @@ class TorrentFile():
             if b"udp" in tracker:
                 self.request_peers_udp()
             else:
-                peers = self.request_peers_http()
+                peers = self.request_peers_http(tracker)
         return peers
 
-    def request_peers_udp(self):
-        
-
-    def request_peers_http(self):
+    def request_peers_http(self, tracker):
         get_params = {
             "info_hash": self.info_hash,
             "peer_id": bytes(id, "utf-8"),
@@ -83,9 +80,11 @@ class TorrentFile():
             "left": self.meta_data[b"info"][b"length"]
         }
         try:
-            return bencodepy.bdecode(get(self.meta_data[b"announce"], get_params, timeout=0.5).content)
+            return bencodepy.bdecode(get(tracker, get_params, timeout=0.5).content)
         except Timeout:
-            logging.info(str(self.meta_data[b"announce"], "utf-8") + "timed out")
+            logging.info(str(tracker, "utf-8") + "timed out")
+
+    
 
 
 if __name__ == "__main__":
