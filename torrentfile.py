@@ -1,4 +1,5 @@
 from hashlib import sha1
+from urllib import parse
 from requests import get, Timeout
 from pprint import pprint
 from math import ceil, lgamma
@@ -9,6 +10,7 @@ import socket
 from urllib.parse import urlparse
 import requests
 import logging
+import argparse
 
 id = "-BC0012-3456abcde123"
 local_addr = ("192.168.234.17", 55557)
@@ -122,7 +124,7 @@ class TorrentFile():
         }
         try:
             return bencodepy.bdecode(get(tracker, get_params, timeout=0.5).content)
-        except Timeout:
+        except Timeout as err:
             raise TrackerError("HTTP GET request to tracker timed out.", tracker)
         except requests.ConnectionError as err:
             raise TrackerError(err.strerror)
@@ -138,7 +140,7 @@ class TorrentFile():
 
         if len(connnect_response) < 16:
             raise TrackerError("Response smaller than 16 bytes.")
-        if connnect_response[0:4] != 0:
+        if int.from_bytes(connnect_response[0:4], "big") != 0:
             raise TrackerError("Action field in response is not connect (0).")
         if connnect_response[4:8] != transaction_id.to_bytes(4, "big"):
             raise TrackerError("The tracker answered with a different transaction id.")
@@ -150,11 +152,16 @@ class TorrentFile():
         transaction_id = randint(0, 4294967295).to_bytes(4, "big")
         announce_request = connection_id + (1).to_bytes(4, "big") + transaction_id + self.info_hash +  bytes(id, "utf-8") + (0).to_bytes(8, "big") + self.meta_data[b"info"][b"length"].to_bytes(8, "big") + (0).to_bytes(8, "big") + (2).to_bytes(4, "big") + (0).to_bytes(4, "big") + (0).to_bytes(4, "big") + (-1).to_bytes(4, "big", signed = True) + (local_addr[1]).to_bytes(2, "big")
         tracker_socket.send(announce_request)
-        response = tracker_socket.recv(150)
+        try:
+            response = tracker_socket.recv(150)
+        except socket.timeout as err:
+            raise TrackerError(err.strerror)
 
+        if len(response) < 20:
+            raise TrackerError("Response smaller than 20 bytes.")
         if int.from_bytes(response[0:4], "big") != 1:
             raise TrackerError("Action field in response is not announce (1).")
-        if int.from_bytes(response[4:8], "big") != transaction_id:
+        if response[4:8] != transaction_id:
             raise TrackerError("The tracker answered with a different transaction id.")
 
         for i in range(20, len(response), 6):
@@ -179,6 +186,10 @@ class TorrentFile():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(add_help=True)
+    parser.add_argument("--log", type=str, default="WARNING", choices=("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"))
+    args = parser.parse_args()
+    logging.basicConfig(level=args.log)
     a = TorrentFile(
         "The Complete Chess Course - From Beginning to Winning Chess - 21st Century Edition (2016).epub Gooner-[rarbg.to].torrent")
     # a.share()
