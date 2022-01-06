@@ -1,46 +1,60 @@
-from hashlib import sha1
-from requests import get, ConnectTimeout
-from pprint import pprint
-from math import ceil
 import bencodepy
 import socket
 import logging
-from urllib.parse import urlparse
-import requests
-import trackers
+from hashlib import sha1
+from pprint import pprint
+from math import ceil
+from trackers import UDPTracker, HTTPTracker
 
-id = "-BC0012-3456abcde123"
-local_addr = ("172.28.240.197", 56056)
-
-class PeersNotFound(Exception):
-    def __init__(self, message):
-        self.message = message
-
-class Peer():
-    pass
-
-class TorrentFile():
+class TorrentMetaData():
 
     def __init__(self, file_path: str):
-        # self.file_path = file_path
-        # decode file and calculate hash
         with open(file_path, "rb") as file:
+            """ Class atributes """
+            self.trackers = []
+            self.info_hash: bytes = None
+            self.downloading_file = open("./file", "wb")
+            self.creation_date = None
+            self.comment = None
+            self.created_by = None
+            self.encoding = None
+            self.info = {}
+
+            """ Read and decode metainfo file """
             buffer = file.read()
-            self.meta_data = bencodepy.decode(buffer)
+            meta_data: dict = bencodepy.decode(buffer)
+            
+            """ Set variables """
             info_index = buffer.find(b"4:infod")
             self.info_hash = sha1(buffer[info_index+6:-1]).digest()
-            self.downloading_file = open("./file", "wb")
-        try:
-            self.peers = self.request_peers()
-            for peer in self.peers[b"peers"]:
-                peer[b"am_choking"] = 1
-                peer[b"am_interested"] = 0
-                peer[b"peer_choking"] = 1
-                peer[b"peer_interested"] = 0
-        except PeersNotFound:
-            logging.error("Couldn't retrieve peers from trackers.")
+            self.creation_date = meta_data[b"creation date"]
+            self.comment = meta_data[b"comment"]
+            self.created_by = meta_data[b"created by"]
+            self.encoding = meta_data[b"encoding"]
+            
+            """ Set trackers """
+            trackers_url = []
+            trackers_url.append(meta_data.pop(b"announce"))
+            announce_list = meta_data.pop(b"announce-list")
+            try:
+                for url in announce_list:
+                    trackers_url.append(url.pop())
+            except Exception:
+                print("No hay announce-list")
 
-    def share(self):
+            for url in trackers_url:
+                #print(url)
+                url = str(url, "utf-8")
+                if "udp" in url:
+                    self.trackers.append(UDPTracker(url))
+                else:
+                    self.trackers.append(HTTPTracker(url))
+            
+            info_dict = meta_data[b"info"]
+            for key in info_dict:
+                self.info[str(key, "utf-8")] = key
+
+    """def share(self):
         handshake = (19).to_bytes(1, "big") + b"BitTorrent protocol\0\0\0\0\0\0\0\0"+self.info_hash+bytes(id, "utf-8")
         unchoke = (1).to_bytes(4, "big") + (1).to_bytes(1, "big")
         interested = (1).to_bytes(4, "big") + (2).to_bytes(1, "big")
@@ -69,25 +83,18 @@ class TorrentFile():
         self.downloading_file.close()
 
     def request_peers(self):
-        requesters = trackers.TrackerRequestersChain(self.info_hash, self.meta_data)
-        trackers_list = [tracker.pop() for tracker in self.meta_data[b"announce-list"]]
-        trackers_list.insert(0, self.meta_data[b"announce"])
-        for tracker in trackers_list:
-            try:
-                requesters.request_peers(tracker)
-            except socket.timeout:
-                print("time out")
-            except socket.gaierror:
-                print("name or service not known")
-            except trackers.BadResponse as err:
-                print(err.message)
+        peers = []
+        for tracker in self.trackers:
+            peers += tracker.request_peers()
+        return peers"""
 
 
 if __name__ == "__main__":
-    a = TorrentFile(
+    """a = TorrentFile(
         "./The Complete Chess Course - From Beginning to Winning Chess - 21st Century Edition (2016).epub Gooner-[rarbg.to].torrent")
+    print(a.info_hash.hex())
     a.share()
-    """id = "-ZK0012-3456abcde123"
+    id = "-ZK0012-3456abcde123"
     handshake = b"19BitTorrent protocol\0\0\0\0\0\0\0\0"+a.info_hash+bytes(id, "UTF-8")
     handshake = (19).to_bytes(1, "big") + b"BitTorrent protocol\0\0\0\0\0\0\0\0"+a.info_hash+bytes(id, "utf-8")
     unchoke = (1).to_bytes(1, "big") + (1).to_bytes(1, "big")
