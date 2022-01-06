@@ -38,17 +38,17 @@ class TorrentFile():
             self.info_hash = sha1(buffer[info_index+6:-1]).digest()
             self.downloading_file = open("./file", "wb")
         self.peers = self.request_peers()
-        print(self.peers)
-        """for peer in self.peers[b"peers"]:
+        for peer in self.peers:
             peer[b"am_choking"] = 1
             peer[b"am_interested"] = 0
             peer[b"peer_choking"] = 1
-            peer[b"peer_interested"] = 0"""
-        # print(self.peers)
+            peer[b"peer_interested"] = 0
 
     def share(self):
-        handshake = (19).to_bytes(
-            1, "big") + b"BitTorrent protocol\0\0\0\0\0\0\0\0"+self.info_hash+bytes(id, "utf-8")
+        connected = False
+        i = 0
+
+        handshake = (19).to_bytes(1, "big") + b"BitTorrent protocol\0\0\0\0\0\0\0\0"+self.info_hash+bytes(id, "utf-8")
         unchoke = (1).to_bytes(4, "big") + (1).to_bytes(1, "big")
         interested = (1).to_bytes(4, "big") + (2).to_bytes(1, "big")
         request = (13).to_bytes(4, "big") + (6).to_bytes(1, "big") + \
@@ -57,9 +57,18 @@ class TorrentFile():
 
         peer_socket = socket.socket()
         peer_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        peer_socket.bind(("172.19.182.254", 55556))
-        peer_socket.connect(
-            (self.peers[b"peers"][0][b"ip"], self.peers[b"peers"][0][b"port"]))
+        peer_socket.settimeout(0.5)
+        peer_socket.bind(local_addr)
+
+        while not connected:
+            try:
+                peer_socket.connect((self.peers[i][b"ip"], self.peers[i][b"port"]))
+                connected = True
+            except ConnectionRefusedError as err:
+                print(self.peers[i][b"ip"])
+                print(err.strerror)
+                i += 1
+
         peer_socket.send(handshake)
         print(peer_socket.recv(68))
         peer_socket.send(interested)
@@ -75,6 +84,7 @@ class TorrentFile():
             print(ans[0:20])
             self.downloading_file.write(ans[12:])
         self.downloading_file.close()
+        peer_socket.close()
 
     def request_peers(self):
         trackers_list = []
@@ -123,7 +133,8 @@ class TorrentFile():
             "left": self.meta_data[b"info"][b"length"]
         }
         try:
-            return bencodepy.bdecode(get(tracker, get_params, timeout=0.5).content)
+            response = bencodepy.bdecode(get(tracker, get_params, timeout=0.5).content)
+            return response[b"peers"]
         except Timeout as err:
             raise TrackerError("HTTP GET request to tracker timed out.", tracker)
         except requests.ConnectionError as err:
@@ -175,7 +186,6 @@ class TorrentFile():
         # print(int.from_bytes(response[12:16], "big")) Leechers
         # print(int.from_bytes(response[16:20], "big")) Seeders
 
-
     def udp_scrape(self, connection_id: int, tracker_socket: socket.socket):
         transaction_id = randint(0, 4294967295)
         udp_request = connection_id + \
@@ -192,4 +202,4 @@ if __name__ == "__main__":
     logging.basicConfig(level=args.log)
     a = TorrentFile(
         "The Complete Chess Course - From Beginning to Winning Chess - 21st Century Edition (2016).epub Gooner-[rarbg.to].torrent")
-    # a.share()
+    a.share()
