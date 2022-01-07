@@ -34,7 +34,6 @@ class Tracker:
 class UDPTracker(Tracker):
     
     def __init__(self, url: str):
-        #super().__init__(url)
         url_parsed = urlparse(url)
         self.name = url_parsed.hostname
         self.port = url_parsed.port
@@ -42,7 +41,6 @@ class UDPTracker(Tracker):
         self.connection_id: bytes = None
 
     def request_peers(self, request_data: dict) -> list:
-        # self.connection = self.get_connection((request_data["ip"], request_data["port"]))
         addr = (request_data["ip"], request_data["port"])
         self.connection_id = self.send_connection_request(addr)
         peers = self.send_announce(request_data, addr)
@@ -115,8 +113,8 @@ class UDPTracker(Tracker):
 
     def make_announce_request(self, request_data: dict) -> bytes:
         transaction_id = randint(0, 4294967295)
-        #announce_request = self.connection_id + (1).to_bytes(4, "big") + transaction_id + self.info_hash +  bytes(client_data[0], "utf-8") + (0).to_bytes(8, "big") + self.meta_data[b"info"][b"length"].to_bytes(8, "big") + (0).to_bytes(8, "big") + (2).to_bytes(4, "big") + (0).to_bytes(4, "big") + (0).to_bytes(4, "big") + (-1).to_bytes(4, "big", signed = True) + (client_data[1][1]).to_bytes(2, "big")
         announce_request = bytearray()
+
         announce_request += self.connection_id.to_bytes(8, "big")                  
         announce_request += (1).to_bytes(4, "big") # action field, 4 bytes
         announce_request += (transaction_id).to_bytes(4, "big") 
@@ -156,19 +154,10 @@ class UDPTracker(Tracker):
 class HTTPTracker(Tracker):
     
     def __init__(self, url: str):
-        # super().__init__(url)
         self.url = url
 
 
     def request_peers(self, request_data: dict) -> list:
-        """get_params = {
-            "info_hash": torrent_meta_data.info_hash,
-            "peer_id": bytes(client_data[0], "utf-8"),
-            "port": client_data[1][1],
-            "downloaded": 0,
-            "uploaded": 0,
-            "left": torrent_meta_data.info["length"]
-        }"""
         try:
             peers = bencodepy.bdecode(get(self.url, request_data, timeout=0.5).content)
             return peers[b"peers"]
