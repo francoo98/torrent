@@ -1,25 +1,15 @@
 from urllib.parse import urlparse
 from requests import get, Timeout, ConnectionError
-import socket
 from random import randint
 import bencodepy
+import socket
+import client_data
 
 class TrackerError(Exception):
     def __init__(self, message):
         self.message = message
 
-class Peer():
 
-    def __init__(self):
-        self.ip = None
-        self.port = None
-        self.am_choking = 1
-        self.am_interested = 0
-        self.is_choking = 1
-        self.is_interested = 0
-    
-    def share(self):
-        pass
 
 class Tracker:
     
@@ -101,8 +91,6 @@ class UDPTracker(Tracker):
             raise TrackerError("Action field in response is not announce (1).")
         #if int.from_bytes(response[4:8], "big") != transaction_id:
         #    raise TrackerError("The tracker answered with a different transaction id.")
-        print(int.from_bytes(response[4:8], "big"))
-        print(transaction_id)
         for i in range(20, len(response), 6):
             ip = str(response[i]) + "." + str(response[i+1]) + "." + str(response[i+2]) + "." + str(response[i+3])
             port = int.from_bytes(response[i+4:i+6], "big")
