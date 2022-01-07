@@ -2,6 +2,7 @@ from torrentfile import TorrentMetaData
 from trackers import Peer, TrackerError
 from pprint import pprint
 import client_data
+import logging
 
 class PeersNotFound(Exception):
     def __init__(self, message):
@@ -40,8 +41,7 @@ class Torrent():
                 peers += tracker.request_peers(request_data)
                 self.peers += [Peer(peer) for peer in peers]
             except TrackerError as err:
-                pass
-                # print("El tracker no respondio. " + err.message)
+                logging.info("El tracker no respondio. " + err.message)
 
 if __name__ == "__main__":
     torrent = Torrent("./The Complete Chess Course - From Beginning to Winning Chess - 21st Century Edition (2016).epub Gooner-[rarbg.to].torrent")
