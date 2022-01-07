@@ -41,9 +41,8 @@ class TorrentMetaData():
                     trackers_url.append(url.pop())
             except Exception:
                 print("No hay announce-list")
-
+                
             for url in trackers_url:
-                #print(url)
                 url = str(url, "utf-8")
                 if "udp" in url:
                     self.trackers.append(UDPTracker(url))
