@@ -9,8 +9,6 @@ class TrackerError(Exception):
     def __init__(self, message):
         self.message = message
 
-
-
 class Tracker:
     
     def __init__(self, url: str):
@@ -54,6 +52,8 @@ class UDPTracker(Tracker):
             connnect_response = tracker_socket.recv(150)
         except socket.timeout:
             raise TrackerError("Tracker timed out.")
+        except ConnectionRefusedError as err:
+            raise TrackerError(err.with_traceback(None))
 
         if len(connnect_response) < 16:
             raise TrackerError("Response smaller than 16 bytes.")
