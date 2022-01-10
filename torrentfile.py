@@ -13,7 +13,6 @@ class TorrentMetaData():
             """ Class atributes """
             self.trackers = []
             self.info_hash: bytes = None
-            self.downloading_file = open("./file", "wb")
             self.creation_date = None
             self.comment = None
             self.created_by = None
@@ -51,4 +50,4 @@ class TorrentMetaData():
             
             info_dict = meta_data[b"info"]
             for key in info_dict:
-                self.info[str(key, "utf-8")] = key
+                self.info[str(key, "utf-8")] = info_dict[key]
