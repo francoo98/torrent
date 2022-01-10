@@ -109,7 +109,7 @@ class UDPTracker(Tracker):
         announce_request += request_data["info_hash"]           
         announce_request += bytes(request_data["peer_id"], "utf-8") 
         announce_request += request_data["downloaded"].to_bytes(8, "big")
-        announce_request += request_data["left"]
+        announce_request += request_data["left"].to_bytes(8, "big")
         announce_request += request_data["uploaded"].to_bytes(8, "big")
         announce_request += request_data["event"].to_bytes(4, "big")
         announce_request += (0).to_bytes(4, "big")  # ip address field, 4 bytes, 0 default
