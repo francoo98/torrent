@@ -3,7 +3,6 @@ from requests import get, Timeout, ConnectionError
 from random import randint
 import bencodepy
 import socket
-import client_data
 
 class TrackerError(Exception):
     def __init__(self, message):
@@ -29,18 +28,16 @@ class UDPTracker(Tracker):
         self.connection_id: bytes = None
 
     def request_peers(self, request_data: dict) -> list:
-        addr = (request_data["ip"], request_data["port"])
-        self.connection_id = self.send_connection_request(addr)
-        peers = self.send_announce(request_data, addr)
+        self.connection_id = self.send_connection_request()
+        peers = self.send_announce(request_data)
 
         return peers
 
-    def send_connection_request(self, addr: tuple) -> int:
+    def send_connection_request(self) -> int:
         try:
             tracker_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             tracker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            tracker_socket.settimeout(1)
-            tracker_socket.bind(addr)
+            tracker_socket.settimeout(0.5)
             tracker_socket.connect((self.name, self.port))
         except socket.gaierror as err:
             raise TrackerError(err.strerror)
@@ -66,12 +63,11 @@ class UDPTracker(Tracker):
         tracker_socket.close()
         return connection_id
 
-    def send_announce(self, request_data: dict, addr: tuple) -> list:
+    def send_announce(self, request_data: dict) -> list:
         try:
             tracker_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             tracker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             tracker_socket.settimeout(0.5)
-            tracker_socket.bind(addr)
             tracker_socket.connect((self.name, self.port))
         except socket.gaierror as err:
             raise TrackerError(err.strerror)
@@ -133,7 +129,6 @@ class UDPTracker(Tracker):
         if self.connection == None:
             self.connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.connection.settimeout(0.5)
-            self.connection.bind(addr)
             try:
                 self.connection.connect((self.name, self.port))
             except socket.gaierror as err:
@@ -143,7 +138,6 @@ class HTTPTracker(Tracker):
     
     def __init__(self, url: str):
         self.url = url
-
 
     def request_peers(self, request_data: dict) -> list:
         try:
