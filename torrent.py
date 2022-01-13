@@ -31,6 +31,7 @@ class Peer():
         self.peer_choking = True
         self.peer_interested = False
         self.pending = []
+        self.bitfield = b""
 
     def start(self):
         handshake = (19).to_bytes(1, "big") + bytes("BitTorrent protocol", "utf-8") + b"\0\0\0\0\0\0\0\0" + self.torrent.torrent_meta_data.info_hash + bytes(client_data.client_id, "utf-8")
@@ -39,7 +40,7 @@ class Peer():
             self.peer_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.peer_socket.connect((self.ip, self.port))
             self.peer_socket.send(handshake)
-            handshake_response = self.peer_socket.recv(1000)
+            handshake_response = self.peer_socket.recv(68)
         except socket.timeout as err:
             #print(err.with_traceback(None))
             raise PeerNotAvailable(err.with_traceback(None))
@@ -53,13 +54,10 @@ class Peer():
             #print(err.with_traceback(None))
             raise PeerNotAvailable(err.with_traceback(None))
 
-        #print("# Respuesta de handshake #")
-        #print(handshake_response)
-
-        if b"\x13BitTorrent protocol" not in handshake_response:
-            return # should raise an exception?
-
-        """ Check for bitfield """
+        if b"\x13BitTorrent protocol" not in handshake_response or len(handshake) != 68:
+            raise PeerNotAvailable("Peer answered with a corrupt handshake")
+        
+        """ Check for bitfield 
         bitfield_len = 0
         if len(handshake_response) > 68:
             bitfield_len = int.from_bytes(handshake_response[68:72], "big")
@@ -67,30 +65,15 @@ class Peer():
             #    raise PeerNotAvailable("Corrupt bitfield")
             self.bitfield = handshake_response[73:73+bitfield_len-1]
         
-        """ Check for other message in the same response """
+        Check for other message in the same response 
         bitfield_end = 68 + bitfield_len + 4
         if len(handshake_response) > bitfield_end:
             msg_len = int.from_bytes(handshake_response[bitfield_end:bitfield_end+4], "big")
             msg = handshake_response[bitfield_end:bitfield_end+4+msg_len+1]
             if len(msg) == msg_len:
-                self.__check_msg(msg)
-
-        self.share()
-
-        """print("# Lectura de prueba #")
-        response = self.peer_socket.recv(450)
-        print(response)
-
+                self.__check_msg(msg)"""
         
-        print("# Respuesta de interested #")
-        self.send_interested()
-        response = self.peer_socket.recv(100)
-        print(response)
-
-        print("# Respuesta de solicitud request #")
-        block_size = int(self.torrent.torrent_meta_data.info["piece length"] / 2)
-        self.request_piece({"index": 0, "begin": 0, "length": block_size})
-        self.peer_socket.close()"""
+        self.share()
     
     def share(self):
         print("share()")
@@ -154,9 +137,13 @@ class Peer():
         if msg[4] == 3:
             self.peer_interested = False
             return
+        if msg[4] == 5:
+            self.bitfield = msg[5:]
+            return
         if msg[4] == 7:
             print(msg[0:120])
             return
+        
 
     def check_socket(self):
         pass
