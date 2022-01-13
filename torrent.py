@@ -1,5 +1,4 @@
 import time
-from typing import Final
 from torrentfile import TorrentMetaData
 from trackers import TrackerError
 from pprint import pprint
@@ -7,7 +6,10 @@ import client_data
 import logging
 import socket
 
-UNCHOKE: Final = b'\x00\x00\x00\x01\x01'
+CHOKE = b"\x00\x00\x00\x01\x00"
+UNCHOKE = b"\x00\x00\x00\x01\x01"
+INTERESTED = b"\x00\x00\x00\x01\x02"
+NOT_INTERESTED = b"\x00\x00\x00\x01\x03"
 
 class PeersNotFound(Exception):
     def __init__(self, message):
@@ -28,6 +30,7 @@ class Peer():
         self.am_interested = False
         self.peer_choking = True
         self.peer_interested = False
+        self.pending = []
 
     def start(self):
         handshake = (19).to_bytes(1, "big") + bytes("BitTorrent protocol", "utf-8") + b"\0\0\0\0\0\0\0\0" + self.torrent.torrent_meta_data.info_hash + bytes(client_data.client_id, "utf-8")
@@ -91,11 +94,10 @@ class Peer():
     
     def share(self):
         print("share()")
-        self.__send_interested()
-        """try:
-            r = self.peer_socket.recv(100)
-        except socket.timeout as err:
-            print(err.with_traceback(None))"""
+        self.peer_socket.send(INTERESTED)
+        self.am_interested = True
+        self.peer_socket.send(UNCHOKE)
+        self.am_choking = False
         
         while True:
             data = b""
@@ -109,9 +111,12 @@ class Peer():
 
             if not self.peer_choking:
                 print("peer not choking")
-                block_size = int(self.torrent.torrent_meta_data.info["piece length"] / 2)
+                # block_size = int(self.torrent.torrent_meta_data.info["piece length"] / 2)
+                block_size = 16384
+                index = 0
                 try:
-                    self.request_piece({"index": 0, "begin": 0, "length": block_size})
+                    if index not in self.pending:
+                        self.request_piece({"index": index, "begin": 0, "length": block_size})
                 except socket.timeout:
                     print("Error de time out.")
 
@@ -119,21 +124,24 @@ class Peer():
     def request_piece(self, request_data: dict):
         print("request_piece()")
         request = bytearray()
+        request += (13).to_bytes(4, "big")
+        request += (6).to_bytes(1, "big")
         request += request_data["index"].to_bytes(4, "big")
         request += request_data["begin"].to_bytes(4, "big")
         request += request_data["length"].to_bytes(4, "big")
         self.peer_socket.send(request)
-        response = self.peer_socket.recv(request_data["length"] + 13)
+        self.pending.append(request_data["index"])
+        """response = self.peer_socket.recv(request_data["length"] + 13)
         print(response[:120])
         if response[4] == 7:
-            return response[12:]
-    
-    def __send_interested(self):
-        msg = (1).to_bytes(4, "big") + (2).to_bytes(1, "big")
-        self.peer_socket.send(msg)
-        self.am_interested = True
+            return response[12:]"""
 
     def __check_msg(self, msg: bytes):
+        if len(msg) < 4:
+            return
+        if msg == b"\0\0\0\0":
+            # keep alive
+            return
         if msg[4] == 0:
             self.peer_choking = True
             return
@@ -146,9 +154,13 @@ class Peer():
         if msg[4] == 3:
             self.peer_interested = False
             return
+        if msg[4] == 7:
+            print(msg[0:120])
+            return
 
     def check_socket(self):
         pass
+
 
 class Torrent():
 
@@ -192,8 +204,8 @@ class Torrent():
 
 if __name__ == "__main__":
     logging.basicConfig(level = "INFO")
-    start = time.time()
+    #start = time.time()
     torrent = Torrent("./The Complete Chess Course - From Beginning to Winning Chess - 21st Century Edition (2016).epub Gooner-[rarbg.to].torrent")
-    finish = time.time()
-    print(finish - start)
-    # torrent.share()
+    #finish = time.time()
+    #print(finish - start)
+    torrent.share()
