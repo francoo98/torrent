@@ -114,10 +114,6 @@ class Peer():
         request += request_data["length"].to_bytes(4, "big")
         self.peer_socket.send(request)
         self.pending.append(request_data["index"])
-        """response = self.peer_socket.recv(request_data["length"] + 13)
-        print(response[:120])
-        if response[4] == 7:
-            return response[12:]"""
 
     def __check_msg(self, msg: bytes):
         if len(msg) < 4:
@@ -137,6 +133,10 @@ class Peer():
         if msg[4] == 3:
             self.peer_interested = False
             return
+        if msg[4] == 4 and len(msg) == 9:
+            piece_index = int.from_bytes(msg[5:9], "big")
+            self.__add_piece_to_bitfield(piece_index)
+            return
         if msg[4] == 5:
             self.bitfield = msg[5:]
             return
@@ -144,10 +144,18 @@ class Peer():
             print(msg[0:120])
             return
         
-
+    def __add_piece_to_bitfield(self, piece_index: int):
+        byte_index = int(piece_index/8)
+        byte_value = self.bitfield[byte_index]
+        bit_index_in_byte = 7 - (piece_index - byte_index * 8)
+        byte_value = byte_value | (2**bit_index_in_byte)
+        try:
+            self.bitfield[byte_index] = byte_value
+        except IndexError:
+            logging.info("Peer sent have message with wrong piece index")
+    
     def check_socket(self):
         pass
-
 
 class Torrent():
 
