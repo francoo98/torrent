@@ -42,36 +42,16 @@ class Peer():
             self.peer_socket.send(handshake)
             handshake_response = self.peer_socket.recv(68)
         except socket.timeout as err:
-            #print(err.with_traceback(None))
             raise PeerNotAvailable(err.with_traceback(None))
         except ConnectionRefusedError as err:
-            #print(err.with_traceback(None))
             raise PeerNotAvailable(err.with_traceback(None))
         except ConnectionResetError as err:
-            #print(err.with_traceback(None))
             raise PeerNotAvailable(err.with_traceback(None))
         except OSError as err: # No route to host is one possible error
-            #print(err.with_traceback(None))
             raise PeerNotAvailable(err.with_traceback(None))
 
         if b"\x13BitTorrent protocol" not in handshake_response or len(handshake) != 68:
             raise PeerNotAvailable("Peer answered with a corrupt handshake")
-        
-        """ Check for bitfield 
-        bitfield_len = 0
-        if len(handshake_response) > 68:
-            bitfield_len = int.from_bytes(handshake_response[68:72], "big")
-            #if len(handshake_response[72:]) < bitfield_len:
-            #    raise PeerNotAvailable("Corrupt bitfield")
-            self.bitfield = handshake_response[73:73+bitfield_len-1]
-        
-        Check for other message in the same response 
-        bitfield_end = 68 + bitfield_len + 4
-        if len(handshake_response) > bitfield_end:
-            msg_len = int.from_bytes(handshake_response[bitfield_end:bitfield_end+4], "big")
-            msg = handshake_response[bitfield_end:bitfield_end+4+msg_len+1]
-            if len(msg) == msg_len:
-                self.__check_msg(msg)"""
         
         self.share()
     
@@ -199,8 +179,5 @@ class Torrent():
 
 if __name__ == "__main__":
     logging.basicConfig(level = "INFO")
-    #start = time.time()
     torrent = Torrent("./The Complete Chess Course - From Beginning to Winning Chess - 21st Century Edition (2016).epub Gooner-[rarbg.to].torrent")
-    #finish = time.time()
-    #print(finish - start)
     torrent.share()
