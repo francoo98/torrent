@@ -1,10 +1,10 @@
-import time
 from torrentfile import TorrentMetaData
 from trackers import TrackerError
 from pprint import pprint
 import client_data
 import logging
 import socket
+from math import ceil
 
 CHOKE = b"\x00\x00\x00\x01\x00"
 UNCHOKE = b"\x00\x00\x00\x01\x01"
@@ -147,6 +147,7 @@ class Torrent():
         self.left = self.torrent_meta_data.info["length"]
         self.peers = []
         self.request_peers()
+        self.bitfield = b"\0" * ceil(self.torrent_meta_data.info["length"] / self.torrent_meta_data.info["piece length"] / 8)
 
     def share(self):
         for peer in self.peers:
