@@ -47,7 +47,19 @@ class TorrentMetaData():
                     self.trackers.append(UDPTracker(url))
                 else:
                     self.trackers.append(HTTPTracker(url))
-            
+            """ Set info dict """            
             info_dict = meta_data[b"info"]
             for key in info_dict:
                 self.info[str(key, "utf-8")] = info_dict[key]
+
+            """ Make the 'pieces' key in the info dict a list indexed by piece id """
+            pieces_hashes = self.info["pieces"]
+            self.info["pieces"] = []
+            total_pieces = int(len(pieces_hashes) / 20)
+            for i in range(0, total_pieces):
+                self.info["pieces"].append(pieces_hashes[i*20:i*20+20])
+
+if __name__ == "__main__":
+    t = TorrentMetaData("./The Complete Chess Course - From Beginning to Winning Chess - 21st Century Edition (2016).epub Gooner-[rarbg.to].torrent")
+    print(t.info["pieces"])
+    print(len(t.info["pieces"]))
