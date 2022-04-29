@@ -9,10 +9,11 @@ class FileManager():
 class SingleFileManager(FileManager):
 
     def __init__(self, info: dict):
-        self.name = info[b"name"]
-        self.length = info[b"length"]
-        self.piece_len = info[b"piece legth"]
-        self.file = open("./" + self.name, "xb")
+        self.name = str(info["name"], "UTF-8")
+        self.length = info["length"]
+        self.piece_len = info["piece length"]
+        self.file = open("./" + self.name, "ab")
+        self.file.seek(0)
 
     def write_piece(self, piece: tuple):
         offset = piece(0)*self.piece_len
