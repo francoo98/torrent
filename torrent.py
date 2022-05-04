@@ -1,15 +1,19 @@
+from hashlib import sha1
+from math import ceil
+from random import randint
+from bitfield import BitField
+from filemanager import SingleFileManager
 from torrentfile import TorrentMetaData
 from trackers import TrackerError
-from pprint import pprint
 import client_data
 import logging
 import socket
-from math import ceil
 
 CHOKE = b"\x00\x00\x00\x01\x00"
 UNCHOKE = b"\x00\x00\x00\x01\x01"
 INTERESTED = b"\x00\x00\x00\x01\x02"
 NOT_INTERESTED = b"\x00\x00\x00\x01\x03"
+BLOCK_SIZE = 16384
 
 class PeersNotFound(Exception):
     def __init__(self, message):
@@ -31,7 +35,8 @@ class Peer():
         self.peer_choking = True
         self.peer_interested = False
         self.pending = []
-        self.bitfield = b""
+        self.bitfield = None
+        self.current_piece = [-1, bytearray(self.torrent.torrent_meta_data.info["piece length"])] # [1] piece id, [2] data
 
     def start(self):
         handshake = (19).to_bytes(1, "big") + bytes("BitTorrent protocol", "utf-8") + b"\0\0\0\0\0\0\0\0" + self.torrent.torrent_meta_data.info_hash + bytes(client_data.client_id, "utf-8")
@@ -56,13 +61,30 @@ class Peer():
         self.share()
     
     def share(self):
-        print("share()")
         self.peer_socket.send(INTERESTED)
         self.am_interested = True
         self.peer_socket.send(UNCHOKE)
         self.am_choking = False
         
         while True:
+            try:
+                self.__check_input()
+            except socket.timeout:
+                print("Timeout de " + self.ip)
+                return
+            except PeerNotAvailable as err:
+                print(err.message)
+                self.peer_socket.close()
+                return
+
+            piece_id = randint(0, self.torrent.number_of_pieces)
+            if (self.bitfield and not self.peer_choking and self.am_interested
+                and self.torrent.bitfield[piece_id] == 0 and self.current_piece[0] == -1):
+                self.current_piece[0] = piece_id 
+                for i in range(self.torrent.number_of_blocks):
+                    self.request_piece({"index": self.current_piece[0], "begin": i*BLOCK_SIZE, "length": BLOCK_SIZE}) 
+
+            """
             data = b""
             try:
                 data = self.peer_socket.recv(4)
@@ -70,22 +92,26 @@ class Peer():
                     msg = self.peer_socket.recv(int.from_bytes(data, "big"))
                     self.__check_msg(data + msg)
             except socket.timeout:
-                pass
-
+                print("Timeout")
+            
             if not self.peer_choking:
-                print("peer not choking")
+                if self.current_piece[0] == -1:
+                    self.current_piece[0] = index
+                # print("peer not choking")
                 # block_size = int(self.torrent.torrent_meta_data.info["piece length"] / 2)
-                block_size = 16384
-                index = 0
+                n = int(self.torrent.torrent_meta_data.info["piece length"] / BLOCK_SIZE)
                 try:
                     if index not in self.pending:
-                        self.request_piece({"index": index, "begin": 0, "length": block_size})
+                        # self.request_piece({"index": index, "begin": 0, "length": block_size})
+                        while n >= 0:
+                            self.request_piece({"index": index, "begin": n*BLOCK_SIZE, "length": BLOCK_SIZE})
+                            print("requested")
+                            n = n - 1
                 except socket.timeout:
                     print("Error de time out.")
-
+            """
 
     def request_piece(self, request_data: dict):
-        print("request_piece()")
         request = bytearray()
         request += (13).to_bytes(4, "big")
         request += (6).to_bytes(1, "big")
@@ -115,16 +141,36 @@ class Peer():
             return
         if msg[4] == 4 and len(msg) == 9:
             piece_index = int.from_bytes(msg[5:9], "big")
-            self.__add_piece_to_bitfield(piece_index)
+            self.bitfield.add(piece_index)
+            # self.__add_piece_to_bitfield(piece_index)
             return
         if msg[4] == 5:
-            self.bitfield = msg[5:]
+            bitfield_length = int.from_bytes(msg[0:4], "big") - 1
+            if bitfield_length != ceil(self.torrent.number_of_pieces/8) or len(msg[5:]) != ceil(self.torrent.number_of_pieces/8): 
+                # raise PeerNotAvailable("Peer sent corrupt bitfield")
+                pass
+            self.bitfield = BitField.from_bytes(msg[5:])
+            return
+        if msg[4] == 6:
+            print("Se solicito un bloque")
             return
         if msg[4] == 7:
-            print(msg[0:120])
+            offset = int.from_bytes(msg[9:13], "big")
+            length = int.from_bytes(msg[0:4], "big") - 9
+            self.current_piece[1][offset:offset+length] = msg[14:]
+            if sha1(self.current_piece[1]) == self.torrent.torrent_meta_data.info["pieces"][self.current_piece[0]]:
+                self.current_piece[0] = -1
+                self.torrent.add_piece(self.current_piece)
             return
+        if msg[4] == 8:
+            print("Se cancelo una solicitud de bloque")
+            return
+        if msg[4] == 9:
+            print("Puerto DHT")
+            return
+
         
-    def __add_piece_to_bitfield(self, piece_index: int):
+    """def __add_piece_to_bitfield(self, piece_index: int):
         byte_index = int(piece_index/8)
         byte_value = self.bitfield[byte_index]
         bit_index_in_byte = 7 - (piece_index - byte_index * 8)
@@ -132,22 +178,34 @@ class Peer():
         try:
             self.bitfield[byte_index] = byte_value
         except IndexError:
-            logging.info("Peer sent have message with wrong piece index")
+            logging.info("Peer sent have message with wrong piece index")"""
     
-    def check_socket(self):
-        pass
+    def __check_input(self):
+        data = b""
+        data = self.peer_socket.recv(4)
+        if len(data) == 4:
+            msg = self.peer_socket.recv(int.from_bytes(data, "big"))
+            self.__check_msg(data + msg)
+
 
 class Torrent():
 
     def __init__(self, file_path: str):
         self.torrent_meta_data = TorrentMetaData(file_path)
-        self.downloading_file = open("./file", "wb")
         self.downloaded = 0
         self.uploaded = 0
         self.left = self.torrent_meta_data.info["length"]
         self.peers = []
         self.request_peers()
-        self.bitfield = b"\0" * ceil(self.torrent_meta_data.info["length"] / self.torrent_meta_data.info["piece length"] / 8)
+        self.file_manager = None
+        self.number_of_pieces = ceil(self.torrent_meta_data.info["length"]/self.torrent_meta_data.info["piece length"]) 
+        self.number_of_blocks = int(self.torrent_meta_data.info["piece length"] / BLOCK_SIZE)
+        self.bitfield = BitField(self.number_of_pieces)
+
+        if "files" in self.torrent_meta_data.info.keys():
+            self.file_manager = None
+        else:
+            self.file_manager = SingleFileManager(self.torrent_meta_data.info)
 
     def share(self):
         for peer in self.peers:
@@ -177,8 +235,12 @@ class Torrent():
                 self.peers += [Peer(peer, self) for peer in peers]
             except TrackerError as err:
                 logging.info(err.message)
+    
+    def add_piece(self, piece: tuple):
+        self.file_manager.write_piece(piece)
+        # TO-DO: add piece to bitfield
 
 if __name__ == "__main__":
     logging.basicConfig(level = "INFO")
-    torrent = Torrent("./The Complete Chess Course - From Beginning to Winning Chess - 21st Century Edition (2016).epub Gooner-[rarbg.to].torrent")
+    torrent = Torrent("./Introducing Data Science - Big Data, Machine Learning and more, using Python tools (2016).pdf Gooner-[rarbg.to].torrent")
     torrent.share()
