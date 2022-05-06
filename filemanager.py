@@ -24,7 +24,11 @@ class SingleFileManager(FileManager):
         self.length = info["length"]
         self.piece_len = info["piece length"]
         self.pieces = info["pieces"]
-        self.file = open("./" + self.name, "x+b")
+        
+        try:
+            self.file = open("./" + self.name, "x+b")
+        except FileExistsError:
+            self.file = open("./" + self.name, "r+b")
         self.file.seek(0)
 
     def write_piece(self, piece: tuple):
