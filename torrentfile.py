@@ -13,11 +13,11 @@ class TorrentMetaData():
             """ Class atributes """
             self.trackers = []
             self.info_hash: bytes = None
-            self.creation_date = None
-            self.comment = None
-            self.created_by = None
-            self.encoding = None
             self.info = {}
+            #self.creation_date = None
+            #self.created_by = None
+            #self.comment = None
+            #self.encoding = None
 
             """ Read and decode metainfo file """
             buffer = file.read()
@@ -26,10 +26,10 @@ class TorrentMetaData():
             """ Set variables """
             info_index = buffer.find(b"4:infod")
             self.info_hash = sha1(buffer[info_index+6:-1]).digest()
-            self.creation_date = meta_data[b"creation date"]
-            self.comment = meta_data[b"comment"]
-            self.created_by = meta_data[b"created by"]
-            self.encoding = meta_data[b"encoding"]
+            #self.creation_date = meta_data[b"creation date"]
+            #self.created_by = meta_data[b"created by"]
+            #self.comment = meta_data[b"comment"]
+            #self.encoding = meta_data[b"encoding"]
             
             """ Set trackers """
             trackers_url = []
@@ -47,6 +47,7 @@ class TorrentMetaData():
                     self.trackers.append(UDPTracker(url))
                 else:
                     self.trackers.append(HTTPTracker(url))
+
             """ Set info dict """            
             info_dict = meta_data[b"info"]
             for key in info_dict:
@@ -61,5 +62,4 @@ class TorrentMetaData():
 
 if __name__ == "__main__":
     t = TorrentMetaData("./The Complete Chess Course - From Beginning to Winning Chess - 21st Century Edition (2016).epub Gooner-[rarbg.to].torrent")
-    print(t.info["pieces"])
-    print(len(t.info["pieces"]))
+    print(t.info["pieces"][2])
