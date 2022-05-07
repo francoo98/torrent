@@ -29,12 +29,18 @@ class SingleFileManager(FileManager):
             self.file = open("./" + self.name, "x+b")
         except FileExistsError:
             self.file = open("./" + self.name, "r+b")
+        
         self.file.seek(0)
 
     def write_piece(self, piece: tuple):
         offset = piece(0)*self.piece_len
         self.file.seek(offset)
         self.file.write(piece(1))
+
+    def get_piece(self, piece_id: int) -> tuple:
+        self.file.seek(piece_id * self.piece_len)
+        piece = self.file.read(self.piece_len)
+        return (piece_id, piece)
 
     def calculate_bitfield(self):
         piece_id = 0
