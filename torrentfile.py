@@ -34,8 +34,8 @@ class TorrentMetaData():
             """ Set trackers """
             trackers_url = []
             trackers_url.append(meta_data.pop(b"announce"))
-            announce_list = meta_data.pop(b"announce-list")
             try:
+                announce_list = meta_data.pop(b"announce-list")
                 for url in announce_list:
                     trackers_url.append(url.pop())
             except Exception:
