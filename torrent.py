@@ -1,6 +1,7 @@
 from hashlib import sha1
 from math import ceil
 from random import randint
+from socketserver import BaseRequestHandler
 from bitfield import BitField
 from filemanager import SingleFileManager
 from torrentfile import TorrentMetaData
@@ -37,6 +38,13 @@ class Peer():
         self.pending = []
         self.bitfield = None
         self.current_piece = [-1, bytearray(self.torrent.torrent_meta_data.info["piece length"])] # [1] piece id, [2] data
+
+    @classmethod
+    def from_connection(cls, conn, torrent):
+        peer_data = {b"ip": conn[1][0], b"port": conn[1][1]}
+        peer = cls(peer_data, torrent)
+        peer.peer_socket = conn[0]
+        peer.share()
 
     def start(self):
         handshake = (19).to_bytes(1, "big") + bytes("BitTorrent protocol", "utf-8") + b"\0\0\0\0\0\0\0\0" + self.torrent.torrent_meta_data.info_hash + bytes(client_data.client_id, "utf-8")
@@ -152,7 +160,7 @@ class Peer():
             self.bitfield = BitField.from_bytes(msg[5:])
             return
         if msg[4] == 6:
-            print("Se solicito un bloque")
+            self.__answer_block_request(msg)
             return
         if msg[4] == 7:
             offset = int.from_bytes(msg[9:13], "big")
@@ -168,6 +176,7 @@ class Peer():
         if msg[4] == 9:
             print("Puerto DHT")
             return
+        print("LLego un mensaje corrupto")
 
         
     """def __add_piece_to_bitfield(self, piece_index: int):
@@ -187,6 +196,13 @@ class Peer():
             msg = self.peer_socket.recv(int.from_bytes(data, "big"))
             self.__check_msg(data + msg)
 
+    def __answer_block_request(self, request_msg):
+        piece_id = int.from_bytes(request_msg[5:9], "big")
+        if self.torrent.bitfield[piece_id]:
+            block_offset = int.from_bytes(request_msg[9:13], "big")
+            lenght = int.from_bytes(request_msg[13:17], "big")
+            piece = self.torrent.get_piece(piece_id)
+            self.peer_socket.send(piece[1][block_offset:block_offset+lenght])
 
 class Torrent():
 
@@ -200,12 +216,14 @@ class Torrent():
         self.file_manager = None
         self.number_of_pieces = ceil(self.torrent_meta_data.info["length"]/self.torrent_meta_data.info["piece length"]) 
         self.number_of_blocks = int(self.torrent_meta_data.info["piece length"] / BLOCK_SIZE)
-        self.bitfield = BitField(self.number_of_pieces)
+        self.bitfield = None
 
         if "files" in self.torrent_meta_data.info.keys():
             self.file_manager = None
         else:
             self.file_manager = SingleFileManager(self.torrent_meta_data.info)
+
+        self.bitfield = self.file_manager.calculate_bitfield()
 
     def share(self):
         for peer in self.peers:
@@ -213,6 +231,8 @@ class Torrent():
                 peer.start()
             except PeerNotAvailable as err:
                 logging.info(err.with_traceback(None))
+        
+
 
     def request_peers(self):
         peers = []
@@ -242,5 +262,5 @@ class Torrent():
 
 if __name__ == "__main__":
     logging.basicConfig(level = "INFO")
-    torrent = Torrent("./Introducing Data Science - Big Data, Machine Learning and more, using Python tools (2016).pdf Gooner-[rarbg.to].torrent")
+    torrent = Torrent("./text.txt.torrent")
     torrent.share()
