@@ -37,10 +37,10 @@ class SingleFileManager(FileManager):
         self.file.seek(offset)
         self.file.write(piece(1))
 
-    def get_piece(self, piece_id: int) -> tuple:
+    def get_piece(self, piece_id: int) -> list:
         self.file.seek(piece_id * self.piece_len)
         piece = self.file.read(self.piece_len)
-        return (piece_id, piece)
+        return [piece_id, piece]
 
     def calculate_bitfield(self):
         piece_id = 0
