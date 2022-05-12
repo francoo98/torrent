@@ -177,7 +177,6 @@ class Peer():
             print("Puerto DHT")
             return
         print("LLego un mensaje corrupto")
-
         
     """def __add_piece_to_bitfield(self, piece_index: int):
         byte_index = int(piece_index/8)
@@ -200,9 +199,11 @@ class Peer():
         piece_id = int.from_bytes(request_msg[5:9], "big")
         if self.torrent.bitfield[piece_id]:
             block_offset = int.from_bytes(request_msg[9:13], "big")
-            lenght = int.from_bytes(request_msg[13:17], "big")
+            length = int.from_bytes(request_msg[13:17], "big")
             piece = self.torrent.get_piece(piece_id)
-            self.peer_socket.send(piece[1][block_offset:block_offset+lenght])
+            piece[1] = piece[1][block_offset:block_offset+length]
+            piece_msg = (9 + len(piece[1])).to_bytes(4, "big") + (7).to_bytes(1, "big") + request_msg[5:9] + request_msg[9:13] + piece[1]
+            self.peer_socket.send(piece_msg)
 
 class Torrent():
 
@@ -231,8 +232,6 @@ class Torrent():
                 peer.start()
             except PeerNotAvailable as err:
                 logging.info(err.with_traceback(None))
-        
-
 
     def request_peers(self):
         peers = []
@@ -242,6 +241,7 @@ class Torrent():
             "downloaded": self.downloaded,
             "left": self.left,
             "uploaded": self.uploaded,
+            "compact": 1,
             "event": 0,
             "ip": 0,
             "key": 0,
@@ -260,7 +260,11 @@ class Torrent():
         self.file_manager.write_piece(piece)
         # TO-DO: add piece to bitfield
 
+    def get_piece(self, piece_id):
+        return self.file_manager.get_piece(piece_id)
+
 if __name__ == "__main__":
     logging.basicConfig(level = "INFO")
-    torrent = Torrent("./text.txt.torrent")
-    torrent.share()
+    torrent = Torrent("./imagen.jpg.torrent")
+    print(torrent.peers[0].ip)
+    print(torrent.peers[0].port)
