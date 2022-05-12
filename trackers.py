@@ -30,7 +30,6 @@ class UDPTracker(Tracker):
     def request_peers(self, request_data: dict) -> list:
         self.connection_id = self.send_connection_request()
         peers = self.send_announce(request_data)
-
         return peers
 
     def send_connection_request(self) -> int:
@@ -83,10 +82,11 @@ class UDPTracker(Tracker):
 
         if len(response) < 20:
             raise TrackerError("Response smaller than 20 bytes.")
-        if int.from_bytes(response[0:4], "big") != 1:
-            raise TrackerError("Action field in response is not announce (1).")
+        #if int.from_bytes(response[0:4], "big") != 1:
+        #    raise TrackerError("Action field in response is not announce (1).")
         #if int.from_bytes(response[4:8], "big") != transaction_id:
         #    raise TrackerError("The tracker answered with a different transaction id.")
+        print(response)
         for i in range(20, len(response), 6):
             ip = str(response[i]) + "." + str(response[i+1]) + "." + str(response[i+2]) + "." + str(response[i+3])
             port = int.from_bytes(response[i+4:i+6], "big")
@@ -111,7 +111,7 @@ class UDPTracker(Tracker):
         announce_request += (0).to_bytes(4, "big")  # ip address field, 4 bytes, 0 default
         announce_request += (0).to_bytes(4, "big")  # key field, 4 bytes
         announce_request += (-1).to_bytes(4, "big", signed = True) # num_want field, 4 bytes, -1 default
-        announce_request += (request_data["port"]).to_bytes(4, "big")
+        announce_request += (request_data["port"]).to_bytes(2, "big")
 
         return announce_request
 
