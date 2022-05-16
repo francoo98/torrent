@@ -37,7 +37,7 @@ class Peer():
         self.peer_interested = False
         self.pending = []
         self.bitfield = None
-        self.current_piece = [-1, bytearray(self.torrent.torrent_meta_data.info["piece length"])] # [1] piece id, [2] data
+        self.current_piece = [-1, bytearray(0)] # [1] piece id, [2] data
 
     @classmethod
     def from_connection(cls, conn, torrent):
@@ -78,15 +78,15 @@ class Peer():
             try:
                 self.__check_input()
             except socket.timeout:
-                print("Timeout de " + self.ip)
-                return
+                # print("Timeout de " + self.ip)
+                pass
             except PeerNotAvailable as err:
                 print(err.message)
                 self.peer_socket.close()
                 return
 
-            piece_id = randint(0, self.torrent.number_of_pieces)
-            if (self.bitfield and not self.peer_choking and self.am_interested
+            piece_id = randint(0, self.torrent.number_of_pieces - 1)
+            if (self.bitfield and not self.peer_choking and self.am_interested 
                 and self.torrent.bitfield[piece_id] == 0 and self.current_piece[0] == -1):
                 self.current_piece[0] = piece_id 
                 for i in range(self.torrent.number_of_blocks):
@@ -150,7 +150,6 @@ class Peer():
         if msg[4] == 4 and len(msg) == 9:
             piece_index = int.from_bytes(msg[5:9], "big")
             self.bitfield.add(piece_index)
-            # self.__add_piece_to_bitfield(piece_index)
             return
         if msg[4] == 5:
             bitfield_length = int.from_bytes(msg[0:4], "big") - 1
@@ -165,10 +164,12 @@ class Peer():
         if msg[4] == 7:
             offset = int.from_bytes(msg[9:13], "big")
             length = int.from_bytes(msg[0:4], "big") - 9
-            self.current_piece[1][offset:offset+length] = msg[14:]
-            if sha1(self.current_piece[1]) == self.torrent.torrent_meta_data.info["pieces"][self.current_piece[0]]:
-                self.current_piece[0] = -1
+            self.current_piece[1][offset:offset+length] = msg[13:]
+            if sha1(self.current_piece[1]).digest() == self.torrent.torrent_meta_data.info["pieces"][self.current_piece[0]]:
+                print("Se recibio una pieza de ID = " + str(self.current_piece[0]))
                 self.torrent.add_piece(self.current_piece)
+                self.current_piece[0] = -1
+                self.current_piece[1] = bytearray(0)
             return
         if msg[4] == 8:
             print("Se cancelo una solicitud de bloque")
@@ -197,7 +198,7 @@ class Peer():
 
     def __answer_block_request(self, request_msg):
         piece_id = int.from_bytes(request_msg[5:9], "big")
-        if self.torrent.bitfield[piece_id]:
+        if self.torrent.bitfield[piece_id] == True:
             block_offset = int.from_bytes(request_msg[9:13], "big")
             length = int.from_bytes(request_msg[13:17], "big")
             piece = self.torrent.get_piece(piece_id)
@@ -209,11 +210,8 @@ class Torrent():
 
     def __init__(self, file_path: str):
         self.torrent_meta_data = TorrentMetaData(file_path)
-        self.downloaded = 0
         self.uploaded = 0
-        self.left = self.torrent_meta_data.info["length"]
         self.peers = []
-        self.request_peers()
         self.file_manager = None
         self.number_of_pieces = ceil(self.torrent_meta_data.info["length"]/self.torrent_meta_data.info["piece length"]) 
         self.number_of_blocks = int(self.torrent_meta_data.info["piece length"] / BLOCK_SIZE)
@@ -225,13 +223,21 @@ class Torrent():
             self.file_manager = SingleFileManager(self.torrent_meta_data.info)
 
         self.bitfield = self.file_manager.calculate_bitfield()
+        # self.downloaded = self.__calculate_downloaded()
+        self.downloaded = 0
+        self.left = self.torrent_meta_data.info["length"] - self.downloaded
+        
+        # self.request_peers()
 
     def share(self):
-        for peer in self.peers:
+        peer_data = {b"ip": "127.0.0.2", b"port": 56055}
+        peer = Peer(peer_data, self)
+        peer.start()
+        """for peer in self.peers:
             try:
                 peer.start()
             except PeerNotAvailable as err:
-                logging.info(err.with_traceback(None))
+                logging.info(err.with_traceback(None))"""
 
     def request_peers(self):
         peers = []
@@ -239,10 +245,10 @@ class Torrent():
             "info_hash": self.torrent_meta_data.info_hash,
             "peer_id": client_data.client_id,
             "downloaded": self.downloaded,
-            "left": self.left,
+            "left": 0,
             "uploaded": self.uploaded,
             "compact": 1,
-            "event": 0,
+            "event": "started",
             "ip": 0,
             "key": 0,
             "numwant": -1,
@@ -257,14 +263,34 @@ class Torrent():
                 logging.info(err.message)
     
     def add_piece(self, piece: tuple):
-        self.file_manager.write_piece(piece)
-        # TO-DO: add piece to bitfield
+        if self.bitfield[piece[0]] == 0:
+            self.file_manager.write_piece(piece)
+            self.bitfield.add(piece[0])
 
     def get_piece(self, piece_id):
         return self.file_manager.get_piece(piece_id)
 
+    """def __calculate_downloaded(self):
+        downloaded_pieces = 0
+        downloaded_bytes = 0
+
+        for bit in self.bitfield:
+            downloaded_pieces += bit
+
+        if self.bitfield[-1] == 1:
+            downloaded_pieces -= 1
+            downloaded_bytes = self.torrent_meta_data.info["length"] - self.torrent_meta_data.info["piece length"]*(self.number_of_pieces - 1)
+        
+        downloaded_bytes += downloaded_pieces*self.torrent_meta_data.info["piece length"]
+
+        return downloaded_bytes"""
+
 if __name__ == "__main__":
     logging.basicConfig(level = "INFO")
-    torrent = Torrent("./imagen.jpg.torrent")
-    print(torrent.peers[0].ip)
-    print(torrent.peers[0].port)
+    torrent = Torrent("./texto.txt.torrent")
+    """print(torrent.bitfield.bits)
+    for i in range(16):
+        print(f"Bit {i} en {torrent.bitfield[i]}")
+
+    print(torrent.number_of_pieces)"""
+    torrent.share()
