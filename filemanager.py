@@ -32,10 +32,12 @@ class SingleFileManager(FileManager):
         
         self.file.seek(0)
 
-    def write_piece(self, piece: tuple):
-        offset = piece(0)*self.piece_len
+    def write_piece(self, piece):
+        offset = piece[0]*self.piece_len
+        print(piece[0])
+        print(offset)
         self.file.seek(offset)
-        self.file.write(piece(1))
+        self.file.write(piece[1])
 
     def get_piece(self, piece_id: int) -> list:
         self.file.seek(piece_id * self.piece_len)
