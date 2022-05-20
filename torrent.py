@@ -9,6 +9,7 @@ from trackers import TrackerError
 import client_data
 import logging
 import socket
+import asyncio
 
 CHOKE = b"\x00\x00\x00\x01\x00"
 UNCHOKE = b"\x00\x00\x00\x01\x01"
@@ -30,7 +31,6 @@ class Peer():
         self.torrent = torrent
         self.ip = peer_data[b"ip"]
         self.port = peer_data[b"port"]
-        self.peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.am_choking = True
         self.am_interested = False
         self.peer_choking = True
@@ -40,20 +40,23 @@ class Peer():
         self.current_piece = [-1, bytearray(0)] # [1] piece id, [2] data
 
     @classmethod
-    def from_connection(cls, conn, torrent):
-        peer_data = {b"ip": conn[1][0], b"port": conn[1][1]}
+    async def from_connection(cls, streams, torrent):
+        peer_data = {b"ip": 0, b"port": 0}
         peer = cls(peer_data, torrent)
-        peer.peer_socket = conn[0]
-        peer.share()
+        peer.reader = streams[0]
+        peer.writer = streams[1]
+        asyncio.create_task(peer.share(), name="Peer share")
+        # await t
 
-    def start(self):
+    async def start(self):
         handshake = (19).to_bytes(1, "big") + bytes("BitTorrent protocol", "utf-8") + b"\0\0\0\0\0\0\0\0" + self.torrent.torrent_meta_data.info_hash + bytes(client_data.client_id, "utf-8")
         try:
-            self.peer_socket.settimeout(1.5)
-            self.peer_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.peer_socket.connect((self.ip, self.port))
-            self.peer_socket.send(handshake)
-            handshake_response = self.peer_socket.recv(68)
+            r, w = await asyncio.open_connection(host=self.ip, port=self.port)
+            self.reader = r
+            self.writer = w
+            self.writer.write(handshake)
+            handshake_response = await self.reader.read(68)
+            await self.writer.drain()
         except socket.timeout as err:
             raise PeerNotAvailable(err.with_traceback(None))
         except ConnectionRefusedError as err:
@@ -66,23 +69,27 @@ class Peer():
         if b"\x13BitTorrent protocol" not in handshake_response or len(handshake) != 68:
             raise PeerNotAvailable("Peer answered with a corrupt handshake")
         
-        self.share()
+        asyncio.create_task(self.share(), name="Peer share")
+        # await t
     
-    def share(self):
-        self.peer_socket.send(INTERESTED)
+    async def share(self):
+        self.writer.write(INTERESTED)
+        await self.writer.drain()
         self.am_interested = True
-        self.peer_socket.send(UNCHOKE)
+        self.writer.write(UNCHOKE)
+        await self.writer.drain()
         self.am_choking = False
         
         while True:
+            print("peer share while")
             try:
-                self.__check_input()
+                await self.__check_input()
             except socket.timeout:
-                # print("Timeout de " + self.ip)
+                print("Timeout de " + self.ip)
                 pass
             except PeerNotAvailable as err:
                 print(err.message)
-                self.peer_socket.close()
+                # self.peer_socket.close()
                 return
 
             piece_id = randint(0, self.torrent.number_of_pieces - 1)
@@ -90,6 +97,7 @@ class Peer():
                 and self.torrent.bitfield[piece_id] == 0 and self.current_piece[0] == -1):
                 self.current_piece[0] = piece_id 
                 for i in range(self.torrent.number_of_blocks):
+                    await self.writer.drain()
                     self.request_piece({"index": self.current_piece[0], "begin": i*BLOCK_SIZE, "length": BLOCK_SIZE}) 
 
             """
@@ -120,16 +128,17 @@ class Peer():
             """
 
     def request_piece(self, request_data: dict):
+        print("Se envia una solicitud")
         request = bytearray()
         request += (13).to_bytes(4, "big")
         request += (6).to_bytes(1, "big")
         request += request_data["index"].to_bytes(4, "big")
         request += request_data["begin"].to_bytes(4, "big")
         request += request_data["length"].to_bytes(4, "big")
-        self.peer_socket.send(request)
+        self.writer.write(request)
         self.pending.append(request_data["index"])
 
-    def __check_msg(self, msg: bytes):
+    async def __check_msg(self, msg: bytes):
         if len(msg) < 4:
             return
         if msg == b"\0\0\0\0":
@@ -160,6 +169,7 @@ class Peer():
             return
         if msg[4] == 6:
             self.__answer_block_request(msg)
+            await self.writer.drain()
             return
         if msg[4] == 7:
             offset = int.from_bytes(msg[9:13], "big")
@@ -189,12 +199,16 @@ class Peer():
         except IndexError:
             logging.info("Peer sent have message with wrong piece index")"""
     
-    def __check_input(self):
+    async def __check_input(self):
         data = b""
-        data = self.peer_socket.recv(4)
+        # data = await self.reader.read(4)
+        try:
+            data = await asyncio.wait_for(self.reader.read(4), 0.5)
+        except:
+            print("timeout de read")
         if len(data) == 4:
-            msg = self.peer_socket.recv(int.from_bytes(data, "big"))
-            self.__check_msg(data + msg)
+            msg = await self.reader.read(int.from_bytes(data, "big"))
+            await self.__check_msg(data + msg)
 
     def __answer_block_request(self, request_msg):
         piece_id = int.from_bytes(request_msg[5:9], "big")
@@ -204,7 +218,7 @@ class Peer():
             piece = self.torrent.get_piece(piece_id)
             piece[1] = piece[1][block_offset:block_offset+length]
             piece_msg = (9 + len(piece[1])).to_bytes(4, "big") + (7).to_bytes(1, "big") + request_msg[5:9] + request_msg[9:13] + piece[1]
-            self.peer_socket.send(piece_msg)
+            self.writer.write(piece_msg)
 
 class Torrent():
 
@@ -229,10 +243,13 @@ class Torrent():
         
         # self.request_peers()
 
-    def share(self):
+    async def share(self):
+        print(self.bitfield.bits)
         peer_data = {b"ip": "127.0.0.2", b"port": 56055}
         peer = Peer(peer_data, self)
-        peer.start()
+        t = asyncio.create_task(peer.start(), name="Peer start")
+        # await t
+        # print(t.exception())
         """for peer in self.peers:
             try:
                 peer.start()
