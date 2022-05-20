@@ -43,7 +43,6 @@ class Client():
 
     def __init__(self):
         self.torrents = []
-        # self.peer_server = PeerServer(self)
 
     async def __handle_new_connection(self, reader: StreamReader, writer: StreamWriter):
         handshake = await reader.read(68)
@@ -65,25 +64,14 @@ class Client():
 
     async def run(self):
         server = await start_server(self.__handle_new_connection, client_data.ip, client_data.port)
-        # async with server:
-        #    await server.serve_forever()
         server_task = create_task(server.serve_forever(), name="Peer server")
-        await self.__post_torrent("./imagen.jpg.torrent")
+        await self.__post_torrent("./texto.txt.torrent")
         await server_task
 
     @classmethod
     async def main(cls):
         client = Client()
         await client.run()
-        # await client.run()
-        # peer_server_task = asyncio.create_task(client.peer_server.run())
-        # peer_server_task = create_task(start_server(client.__handle_new_connection, client_data.ip, client_data.port), name="peer server")
-        # await start_server(client.__handle_new_connection, client_data.ip, client_data.port)
-        # client.__post_torrent("./texto.txt.torrent")
-        # await peer_server_task
-        print("hola")
-
-
 
     def find_torrent_by_infohash(self, infohash: bytes):
         for torrent in self.torrents:
@@ -93,10 +81,7 @@ class Client():
 
     async def __post_torrent(self, file_path):
         self.torrents.append(Torrent(file_path))
-        t = create_task(self.torrents[-1].share(), name="Torrent share")
-        await t
+        create_task(self.torrents[-1].share(), name="Torrent share")
     
-    
-
 if __name__ == "__main__":
    run(Client.main(), debug=True) 

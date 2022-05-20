@@ -46,7 +46,6 @@ class Peer():
         peer.reader = streams[0]
         peer.writer = streams[1]
         asyncio.create_task(peer.share(), name="Peer share")
-        # await t
 
     async def start(self):
         handshake = (19).to_bytes(1, "big") + bytes("BitTorrent protocol", "utf-8") + b"\0\0\0\0\0\0\0\0" + self.torrent.torrent_meta_data.info_hash + bytes(client_data.client_id, "utf-8")
@@ -70,7 +69,6 @@ class Peer():
             raise PeerNotAvailable("Peer answered with a corrupt handshake")
         
         asyncio.create_task(self.share(), name="Peer share")
-        # await t
     
     async def share(self):
         self.writer.write(INTERESTED)
@@ -81,15 +79,12 @@ class Peer():
         self.am_choking = False
         
         while True:
-            print("peer share while")
             try:
                 await self.__check_input()
             except socket.timeout:
-                print("Timeout de " + self.ip)
                 pass
             except PeerNotAvailable as err:
                 print(err.message)
-                # self.peer_socket.close()
                 return
 
             piece_id = randint(0, self.torrent.number_of_pieces - 1)
@@ -99,36 +94,8 @@ class Peer():
                 for i in range(self.torrent.number_of_blocks):
                     await self.writer.drain()
                     self.request_piece({"index": self.current_piece[0], "begin": i*BLOCK_SIZE, "length": BLOCK_SIZE}) 
-
-            """
-            data = b""
-            try:
-                data = self.peer_socket.recv(4)
-                if len(data) == 4:
-                    msg = self.peer_socket.recv(int.from_bytes(data, "big"))
-                    self.__check_msg(data + msg)
-            except socket.timeout:
-                print("Timeout")
-            
-            if not self.peer_choking:
-                if self.current_piece[0] == -1:
-                    self.current_piece[0] = index
-                # print("peer not choking")
-                # block_size = int(self.torrent.torrent_meta_data.info["piece length"] / 2)
-                n = int(self.torrent.torrent_meta_data.info["piece length"] / BLOCK_SIZE)
-                try:
-                    if index not in self.pending:
-                        # self.request_piece({"index": index, "begin": 0, "length": block_size})
-                        while n >= 0:
-                            self.request_piece({"index": index, "begin": n*BLOCK_SIZE, "length": BLOCK_SIZE})
-                            print("requested")
-                            n = n - 1
-                except socket.timeout:
-                    print("Error de time out.")
-            """
-
+    
     def request_piece(self, request_data: dict):
-        print("Se envia una solicitud")
         request = bytearray()
         request += (13).to_bytes(4, "big")
         request += (6).to_bytes(1, "big")
@@ -189,23 +156,12 @@ class Peer():
             return
         print("LLego un mensaje corrupto")
         
-    """def __add_piece_to_bitfield(self, piece_index: int):
-        byte_index = int(piece_index/8)
-        byte_value = self.bitfield[byte_index]
-        bit_index_in_byte = 7 - (piece_index - byte_index * 8)
-        byte_value = byte_value | (2**bit_index_in_byte)
-        try:
-            self.bitfield[byte_index] = byte_value
-        except IndexError:
-            logging.info("Peer sent have message with wrong piece index")"""
-    
     async def __check_input(self):
         data = b""
-        # data = await self.reader.read(4)
         try:
             data = await asyncio.wait_for(self.reader.read(4), 0.5)
         except:
-            print("timeout de read")
+            pass
         if len(data) == 4:
             msg = await self.reader.read(int.from_bytes(data, "big"))
             await self.__check_msg(data + msg)
@@ -237,19 +193,15 @@ class Torrent():
             self.file_manager = SingleFileManager(self.torrent_meta_data.info)
 
         self.bitfield = self.file_manager.calculate_bitfield()
-        # self.downloaded = self.__calculate_downloaded()
         self.downloaded = 0
         self.left = self.torrent_meta_data.info["length"] - self.downloaded
         
         # self.request_peers()
 
     async def share(self):
-        print(self.bitfield.bits)
         peer_data = {b"ip": "127.0.0.2", b"port": 56055}
         peer = Peer(peer_data, self)
-        t = asyncio.create_task(peer.start(), name="Peer start")
-        # await t
-        # print(t.exception())
+        asyncio.create_task(peer.start(), name="Peer start")
         """for peer in self.peers:
             try:
                 peer.start()
@@ -287,27 +239,7 @@ class Torrent():
     def get_piece(self, piece_id):
         return self.file_manager.get_piece(piece_id)
 
-    """def __calculate_downloaded(self):
-        downloaded_pieces = 0
-        downloaded_bytes = 0
-
-        for bit in self.bitfield:
-            downloaded_pieces += bit
-
-        if self.bitfield[-1] == 1:
-            downloaded_pieces -= 1
-            downloaded_bytes = self.torrent_meta_data.info["length"] - self.torrent_meta_data.info["piece length"]*(self.number_of_pieces - 1)
-        
-        downloaded_bytes += downloaded_pieces*self.torrent_meta_data.info["piece length"]
-
-        return downloaded_bytes"""
-
 if __name__ == "__main__":
     logging.basicConfig(level = "INFO")
     torrent = Torrent("./texto.txt.torrent")
-    """print(torrent.bitfield.bits)
-    for i in range(16):
-        print(f"Bit {i} en {torrent.bitfield[i]}")
-
-    print(torrent.number_of_pieces)"""
     torrent.share()

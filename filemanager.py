@@ -34,8 +34,6 @@ class SingleFileManager(FileManager):
 
     def write_piece(self, piece):
         offset = piece[0]*self.piece_len
-        print(piece[0])
-        print(offset)
         self.file.seek(offset)
         self.file.write(piece[1])
 

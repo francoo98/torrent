@@ -14,11 +14,7 @@ class TorrentMetaData():
             self.trackers = []
             self.info_hash: bytes = None
             self.info = {}
-            #self.creation_date = None
-            #self.created_by = None
-            #self.comment = None
-            #self.encoding = None
-
+            
             """ Read and decode metainfo file """
             buffer = file.read()
             meta_data: dict = bencodepy.decode(buffer)
@@ -26,11 +22,7 @@ class TorrentMetaData():
             """ Set variables """
             info_index = buffer.find(b"4:infod")
             self.info_hash = sha1(buffer[info_index+6:-1]).digest()
-            #self.creation_date = meta_data[b"creation date"]
-            #self.created_by = meta_data[b"created by"]
-            #self.comment = meta_data[b"comment"]
-            #self.encoding = meta_data[b"encoding"]
-            
+                        
             """ Set trackers """
             trackers_url = []
             trackers_url.append(meta_data.pop(b"announce"))
