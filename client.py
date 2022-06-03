@@ -3,6 +3,7 @@ from socket import create_server
 from torrent import Torrent, Peer
 from asyncio import start_server, create_task, run
 import client_data
+import argparse
 
 class TorrentNotFound(Exception):
     pass
@@ -63,9 +64,14 @@ class Client():
         create_task(Peer.from_connection((reader, writer), torrent))
 
     async def run(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument("torrent", type=str)
+        args = parser.parse_args()
+
         server = await start_server(self.__handle_new_connection, client_data.ip, client_data.port)
         server_task = create_task(server.serve_forever(), name="Peer server")
-        await self.__post_torrent("./texto.txt.torrent")
+
+        await self.__post_torrent(args.torrent)
         await server_task
 
     @classmethod
