@@ -31,13 +31,14 @@ class Peer():
         self.torrent = torrent
         self.ip = peer_data[b"ip"]
         self.port = peer_data[b"port"]
+        self.reader = None
+        self.writer = None
         self.am_choking = True
         self.am_interested = False
         self.peer_choking = True
         self.peer_interested = False
-        self.pending = []
         self.bitfield = None
-        self.current_piece = [-1, bytearray(0)] # [1] piece id, [2] data
+        self.current_piece = [-1, bytearray(0)]  # [1] piece id, [2] data
 
     @classmethod
     async def from_connection(cls, streams, torrent):
@@ -199,7 +200,7 @@ class Torrent():
         # self.request_peers()
 
     async def share(self):
-        peer_data = {b"ip": "127.0.0.2", b"port": 56055}
+        peer_data = {b"ip": "127.0.0.2", b"port": 56056}
         peer = Peer(peer_data, self)
         asyncio.create_task(peer.start(), name="Peer start")
         """for peer in self.peers:
