@@ -90,4 +90,4 @@ class Client():
         create_task(self.torrents[-1].share(), name="Torrent share")
     
 if __name__ == "__main__":
-   run(Client.main(), debug=True) 
+   run(Client.main(), debug=True)

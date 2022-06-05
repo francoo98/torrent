@@ -104,7 +104,7 @@ class Peer():
         request += request_data["begin"].to_bytes(4, "big")
         request += request_data["length"].to_bytes(4, "big")
         self.writer.write(request)
-        self.pending.append(request_data["index"])
+        # self.pending.append(request_data["index"])
 
     async def __check_msg(self, msg: bytes):
         if len(msg) < 4:
