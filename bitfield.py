@@ -1,10 +1,13 @@
 import logging
+import threading
+
 
 class BitField():
 
     def __init__(self, size: int):
         self.size = size
-        self.bits = bytearray(self.size) 
+        self.bits = bytearray(self.size)
+        self.locks = [threading.Lock()] * self.size * 8
 
     @classmethod
     def from_bytes(cls, data: bytes):

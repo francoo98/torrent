@@ -145,7 +145,8 @@ class Peer():
             self.current_piece[1][offset:offset+length] = msg[13:]
             if sha1(self.current_piece[1]).digest() == self.torrent.torrent_meta_data.info["pieces"][self.current_piece[0]]:
                 print("Se recibio una pieza de ID = " + str(self.current_piece[0]))
-                self.torrent.add_piece(self.current_piece)
+                await asyncio.to_thread(self.torrent.add_piece, self.current_piece)
+                # self.torrent.add_piece(self.current_piece)
                 self.current_piece[0] = -1
                 self.current_piece[1] = bytearray(0)
             return
@@ -203,6 +204,10 @@ class Torrent():
         peer_data = {b"ip": "127.0.0.2", b"port": 56056}
         peer = Peer(peer_data, self)
         asyncio.create_task(peer.start(), name="Peer start")
+
+        peer_data = {b"ip": "127.0.0.3", b"port": 56056}
+        peer = Peer(peer_data, self)
+        asyncio.create_task(peer.start(), name="Peer start")
         """for peer in self.peers:
             try:
                 peer.start()
@@ -233,9 +238,11 @@ class Torrent():
                 logging.info(err.message)
     
     def add_piece(self, piece: tuple):
+        self.bitfield.locks[piece[0]].acquire()
         if self.bitfield[piece[0]] == 0:
             self.file_manager.write_piece(piece)
             self.bitfield.add(piece[0])
+        self.bitfield.locks[piece[0]].release()
 
     def get_piece(self, piece_id):
         return self.file_manager.get_piece(piece_id)

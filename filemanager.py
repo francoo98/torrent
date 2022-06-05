@@ -35,7 +35,7 @@ class SingleFileManager(FileManager):
     def write_piece(self, piece):
         offset = piece[0]*self.piece_len
         self.file.seek(offset)
-        asyncio.create_task(asyncio.to_thread(self.file.write, piece[1]), name=f"Piece writer task. id: {piece[0]}")
+        self.file.write(piece[1])
 
     def get_piece(self, piece_id: int) -> list:
         self.file.seek(piece_id * self.piece_len)
