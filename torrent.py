@@ -3,7 +3,7 @@ from math import ceil
 from random import randint
 from socketserver import BaseRequestHandler
 from bitfield import BitField
-from filemanager import SingleFileManager
+from filemanager import SingleFileManager, MultiFileManager
 from torrentfile import TorrentMetaData
 from trackers import TrackerError
 import client_data
@@ -46,6 +46,7 @@ class Peer():
         peer = cls(peer_data, torrent)
         peer.reader = streams[0]
         peer.writer = streams[1]
+        print("Un par se conecto")
         asyncio.create_task(peer.share(), name="Peer share")
 
     async def start(self):
@@ -89,7 +90,7 @@ class Peer():
                 return
 
             piece_id = randint(0, self.torrent.number_of_pieces - 1)
-            if (self.bitfield and not self.peer_choking and self.am_interested 
+            if (self.bitfield and not self.peer_choking and self.am_interested
                 and self.torrent.bitfield[piece_id] == 0 and self.current_piece[0] == -1):
                 self.current_piece[0] = piece_id 
                 for i in range(self.torrent.number_of_blocks):
@@ -182,32 +183,35 @@ class Torrent():
 
     def __init__(self, file_path: str):
         self.torrent_meta_data = TorrentMetaData(file_path)
-        self.uploaded = 0
+        # self.uploaded = 0
         self.peers = []
         self.file_manager = None
-        self.number_of_pieces = ceil(self.torrent_meta_data.info["length"]/self.torrent_meta_data.info["piece length"]) 
-        self.number_of_blocks = int(self.torrent_meta_data.info["piece length"] / BLOCK_SIZE)
+        self.number_of_pieces = None
+        self.number_of_blocks = None
         self.bitfield = None
 
         if "files" in self.torrent_meta_data.info.keys():
-            self.file_manager = None
+            self.file_manager = MultiFileManager(self.torrent_meta_data.info)
         else:
             self.file_manager = SingleFileManager(self.torrent_meta_data.info)
 
+        self.number_of_pieces = ceil(self.file_manager.get_torrent_length()/self.torrent_meta_data.info["piece length"])
+        self.number_of_blocks = int(self.torrent_meta_data.info["piece length"] / BLOCK_SIZE)
         self.bitfield = self.file_manager.calculate_bitfield()
-        self.downloaded = 0
-        self.left = self.torrent_meta_data.info["length"] - self.downloaded
+        # self.downloaded = 0
+        # self.left = self.torrent_meta_data.info["length"] - self.downloaded
         
         # self.request_peers()
 
     async def share(self):
+
         peer_data = {b"ip": "127.0.0.2", b"port": 56056}
         peer = Peer(peer_data, self)
         asyncio.create_task(peer.start(), name="Peer start")
-
+        """
         peer_data = {b"ip": "127.0.0.3", b"port": 56056}
         peer = Peer(peer_data, self)
-        asyncio.create_task(peer.start(), name="Peer start")
+        asyncio.create_task(peer.start(), name="Peer start")"""
         """for peer in self.peers:
             try:
                 peer.start()
