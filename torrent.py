@@ -145,7 +145,7 @@ class Peer():
             length = int.from_bytes(msg[0:4], "big") - 9
             self.current_piece[1][offset:offset+length] = msg[13:]
             if sha1(self.current_piece[1]).digest() == self.torrent.torrent_meta_data.info["pieces"][self.current_piece[0]]:
-                print("Se recibio una pieza de ID = " + str(self.current_piece[0]))
+                print(f"Se recibio una pieza de ID = {str(self.current_piece[0])} de {self.ip}:{self.port}")
                 await asyncio.to_thread(self.torrent.add_piece, self.current_piece)
                 # self.torrent.add_piece(self.current_piece)
                 self.current_piece[0] = -1
@@ -209,11 +209,11 @@ class Torrent():
         peer = Peer(peer_data, self)
         asyncio.create_task(peer.start(), name="Peer start")
         """
-        """for peer in self.peers:
+        for peer in self.peers:
             try:
-                peer.start()
+                asyncio.create_task(peer.start())
             except PeerNotAvailable as err:
-                logging.info(err.with_traceback(None))"""
+                logging.info(err.with_traceback(None))
 
     def request_peers(self):
         peers = []
@@ -229,7 +229,7 @@ class Torrent():
             "key": 0,
             "numwant": -1,
             "port": client_data.port}
-
+        print("Me conecto al tracker")
         trackers = self.torrent_meta_data.trackers
         for tracker in trackers:
             try:
@@ -237,6 +237,7 @@ class Torrent():
                 self.peers += [Peer(peer, self) for peer in peers]
             except TrackerError as err:
                 logging.info(err.message)
+        print(f"{self.peers[0].ip}:{self.peers[0].port}")
     
     def add_piece(self, piece: tuple):
         self.bitfield.locks[piece[0]].acquire()

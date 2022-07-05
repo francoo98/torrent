@@ -65,13 +65,22 @@ class Client():
 
     async def run(self):
         parser = argparse.ArgumentParser()
-        parser.add_argument("torrent", type=str)
+        parser.add_argument("-t", type=str)
+        parser.add_argument("-p", type=str)
         args = parser.parse_args()
 
         server = await start_server(self.__handle_new_connection, client_data.ip, client_data.port)
         server_task = create_task(server.serve_forever(), name="Peer server")
 
-        await self.__post_torrent(args.torrent)
+        await self.__post_torrent(args.t)
+        """ Modificaciones hechas durante el final """
+        peer_file = open("./peers.txt", "r")
+        for i in range(2):
+            peer = peer_file.readline()
+            peer = peer.split(":")
+            self.torrents[-1].peers.append(Peer({b"ip": peer[0], b"port": peer[1]}, self.torrents[-1]))
+
+        create_task(self.torrents[-1].share(), name="Torrent share")
         await server_task
 
     @classmethod
@@ -87,7 +96,7 @@ class Client():
 
     async def __post_torrent(self, file_path):
         self.torrents.append(Torrent(file_path))
-        create_task(self.torrents[-1].share(), name="Torrent share")
+        #create_task(self.torrents[-1].share(), name="Torrent share")
     
 if __name__ == "__main__":
    run(Client.main(), debug=True)
